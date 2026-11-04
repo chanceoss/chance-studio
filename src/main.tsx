@@ -1,49 +1,1464 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Aperture, Users, Image, WandSparkles, Clapperboard, CalendarDays, SlidersHorizontal, ArrowUpRight, Plus, Search, Copy, Check, X, Upload, Download, Trash2, ChevronRight, HardDrive, Menu, Sparkles, Camera, Pencil } from 'lucide-react';
-import { initial, readState, saveState, parseBackup, renderPrompt, defaultTemplate, type State, type Character, type Reference } from './model';
+import {
+  Aperture,
+  Users,
+  Image,
+  WandSparkles,
+  Clapperboard,
+  CalendarDays,
+  SlidersHorizontal,
+  ArrowUpRight,
+  Plus,
+  Search,
+  Copy,
+  Check,
+  X,
+  Upload,
+  Download,
+  Trash2,
+  ChevronRight,
+  HardDrive,
+  Menu,
+  Sparkles,
+  Camera,
+  Pencil,
+} from 'lucide-react';
+import {
+  initial,
+  readState,
+  saveState,
+  parseBackup,
+  localDate,
+  renderPrompt,
+  defaultTemplate,
+  type State,
+  type Character,
+  type Reference,
+} from './model';
 import './style.css';
 const uid = () => crypto.randomUUID();
-const navigation = [{name:'Characters',icon:Users},{name:'Prompt builder',icon:WandSparkles},{name:'Storyboards',icon:Clapperboard},{name:'Content calendar',icon:CalendarDays},{name:'Image gallery',icon:Image},{name:'Preset library',icon:SlidersHorizontal}];
-const colors = ['#c7c0ae','#a4b1a2','#b5a5b6','#acb9c5','#c6a48c'];
-function App(){
- const [state,setState]=useState<State>(initial), [loaded,setLoaded]=useState(false), [fatal,setFatal]=useState(''), [page,setPage]=useState('Characters'), [selected,setSelected]=useState(''), [query,setQuery]=useState(''), [modal,setModal]=useState<Character|null>(null), [detail,setDetail]=useState<Character|null>(null), [toast,setToast]=useState(''), [mobile,setMobile]=useState(false), [backup,setBackup]=useState<State|null>(null), [busy,setBusy]=useState(false);
- const importRef=useRef<HTMLInputElement>(null); const stateRef=useRef(state); const writing=useRef(false);
- useEffect(()=>{readState().then(s=>{setState(s);stateRef.current=s;setSelected(s.characters[0]?.id??'');setLoaded(true)}).catch(()=>setFatal('Local storage could not be opened. Enable IndexedDB in your browser and reload.'));},[]);
- const notify=(text:string)=>{setToast(text);setTimeout(()=>setToast(''),3500)};
- async function commit(next:State){if(writing.current) {notify('Please wait for the current save.');return false} writing.current=true;setBusy(true);try{await saveState(next);stateRef.current=next;setState(next);return true}catch{notify('Could not save. Your storage may be full. Export a backup and free space.');return false}finally{writing.current=false;setBusy(false)}}
- const current=state.characters.find(c=>c.id===selected)??state.characters[0];
- const navigate=(name:string)=>{setPage(name);setMobile(false);setQuery('')};
- const newCharacter=()=>setModal({id:uid(),name:'',role:'',bio:'',identity:'',personality:'',color:colors[state.characters.length%colors.length],references:[]});
- async function copy(text:string){try{await navigator.clipboard.writeText(text);notify('Prompt copied. Paste it into ChatGPT with your references.')}catch{notify('Clipboard unavailable. Select the prompt text and copy it manually.')}}
- async function upload(files:FileList|null, kind:Reference['kind'], character:Character, prompt=''){
- if(!files?.length)return;setBusy(true);
- try{const refs:Reference[]=[];for(const file of Array.from(files)){if(!['image/png','image/jpeg','image/webp','image/gif'].includes(file.type)||file.size>8*1024*1024)throw Error('Use PNG, JPEG, WebP, or GIF images up to 8 MB each.');const data=await new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=reject;r.readAsDataURL(file)}); refs.push({id:uid(),name:file.name,kind,data,prompt})}const fresh=stateRef.current;const c=fresh.characters.find(x=>x.id===character.id);if(!c)throw Error('Character no longer exists.'); const updated={...c,references:[...c.references,...refs]};if(await commit({...fresh,characters:fresh.characters.map(x=>x.id===c.id?updated:x)})){setDetail(d=>d?.id===updated.id?updated:d);notify('Images added to your local library.')}}catch(e){notify(e instanceof Error?e.message:'Image upload failed.')}finally{setBusy(false)}}
- function exportBackup(){const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`character-studio-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
- if(fatal)return <div className="loading">{fatal}</div>;if(!loaded)return <div className="loading"><Aperture/> Opening your studio…</div>;
- return <div className="app"><aside className={mobile?'sidebar open':'sidebar'}><a className="brand" href="#" onClick={e=>{e.preventDefault();navigate('Characters')}}><span className="brand-icon"><Aperture size={25}/></span><span>character<span className="brand-sub">STUDIO</span></span></a><div className="workspace"><span className="workspace-icon">P</span><div>Personal workspace<small>YOUR CREATIVE SPACE</small></div><ChevronRight size={14}/></div><p className="nav-label">WORKSPACE</p><nav>{navigation.map(n=><button key={n.name} className={page===n.name?'active':''} onClick={()=>navigate(n.name)}><n.icon size={18}/>{n.name}{n.name==='Characters'&&<span className="nav-count">{state.characters.length}</span>}</button>)}</nav><div className="sidebar-bottom"><div className="local-note"><HardDrive size={17}/><div>Made to stay yours<small>Stored on this device. No cloud.</small></div><span className="green-dot"/></div><div className="backup-actions"><button onClick={exportBackup}><Download size={14}/> Export backup</button><button onClick={()=>importRef.current?.click()}><Upload size={14}/> Import</button></div><div className="user"><div className="avatar">Y</div><div>Your studio<small>LOCAL WORKSPACE</small></div><span className="free-tag">FREE</span></div></div></aside><div className="main-shell"><header className="topbar"><button className="mobile-toggle icon-btn" aria-label="Toggle navigation" onClick={()=>setMobile(!mobile)}><Menu/></button><span className="breadcrumb">Workspace <ChevronRight size={13}/> <strong>{page}</strong></span><span className="private-label"><span className="green-dot"/> Local & private</span></header><main><div className="page-heading"><div><div className="eyebrow">YOUR CREATIVE UNIVERSE</div><h1>{page==='Characters'?'Meet your characters.':page==='Prompt builder'?'A vision, put into words.':page==='Storyboards'?'Every frame tells a story.':page==='Content calendar'?'Make room for inspiration.':page==='Image gallery'?'Your creative archive.':'The details make the image.'}</h1><p>{page==='Characters'?'Build a consistent identity. Bring every idea to life.':page==='Prompt builder'?'Craft identity-aware photography prompts, ready for ChatGPT.':page==='Storyboards'?'Turn a scene into a cinematic sequence of shot prompts.':page==='Content calendar'?'Plan your character’s next appearance.':page==='Image gallery'?'Keep your images and the prompts behind them, together.':'A curated starting point for your next creative direction.'}</p></div>{page==='Characters'&&<button className="primary" onClick={newCharacter}><Plus size={17}/> New character</button>}</div>
- {page==='Characters'&&<><section className="hero"><div className="hero-copy"><span className="pill"><Sparkles size={12}/> THE CHARACTER WORKSPACE</span><h2>One identity.<br/>Infinite possibilities.</h2><p>From the first reference to the final frame.<br/>A home for the characters you create.</p><button onClick={()=>navigate('Prompt builder')}>Open prompt builder <ArrowUpRight size={16}/></button></div><div className="hero-art" aria-hidden="true"><div className="orb orb-back"/><div className="art-card card-back"><span>THE MOOD</span><div className="abstract-sun"/></div><div className="art-card card-front"><div className="abstract-portrait"><div className="portrait-head"/><div className="portrait-body"/></div><div className="art-caption"><span>CHARACTER STUDY</span><Aperture size={15}/></div></div><span className="art-coordinate">IDENTITY / EXPRESSION / POSSIBILITY</span><div className="art-spark">✳</div></div></section><div className="section-toolbar"><div className="section-title">Your characters <span>{state.characters.length.toString().padStart(2,'0')}</span></div><label className="search"><Search size={16}/><input placeholder="Search characters…" value={query} onChange={e=>setQuery(e.target.value)}/></label></div><div className="character-grid">{state.characters.filter(c=>(c.name+' '+c.role).toLowerCase().includes(query.toLowerCase())).map(c=><button className="character-card" key={c.id} onClick={()=>setDetail(c)}><div className="character-visual" style={{background:c.color}}>{c.references.find(r=>r.kind==='Face')?<img src={c.references.find(r=>r.kind==='Face')!.data} alt={c.name}/>:<div className="initial-portrait"><Users size={55} strokeWidth={1}/><span>Add a face reference</span></div>}<span className="image-badge"><Camera size={12}/>{c.references.length} references</span><span className="card-arrow"><ArrowUpRight size={17}/></span></div><div className="character-info"><h3>{c.name}</h3><p>{c.role||'An identity waiting to unfold'}</p><div><span className="status-dot"/> Character profile <span className="character-initial">{c.name.slice(0,1).toUpperCase()}</span></div></div></button>)}<button className="new-card" onClick={newCharacter}><span className="plus-circle"><Plus size={26}/></span><h3>{state.characters.length?'Create a new character':'Your first character starts here'}</h3><p>A new face. A new story.<br/>Make someone unforgettable.</p><span className="new-card-link">Create character <ArrowUpRight size={14}/></span></button></div><div className="workflow-note"><span className="note-icon"><WandSparkles size={19}/></span><div><strong>Your imagination. Your workflow.</strong><p>Build prompts here, create in ChatGPT, and bring your images back to the studio.</p></div><span className="note-tag">NO API KEYS NEEDED</span></div></>}
- {page==='Prompt builder'&&<PromptBuilder current={current} characters={state.characters} selected={selected} setSelected={setSelected} presets={state.presets} copy={copy} save={async text=>{if(await commit({...state,history:[{id:uid(),text,date:new Date().toISOString(),character:current?.name??''},...state.history]}))notify('Prompt saved to history.')}} history={state.history} savedTemplate={state.template} saveTemplate={async template=>{if(await commit({...state,template}))notify('Template saved to your studio.')}}/>}
- {page==='Storyboards'&&<Storyboard current={current} characters={state.characters} selected={selected} setSelected={setSelected} copy={copy}/>}
- {page==='Content calendar'&&<Calendar state={state} commit={commit} notify={notify}/>}
- {page==='Image gallery'&&<Gallery state={state} current={current} selected={selected} setSelected={setSelected} upload={upload} busy={busy} copy={copy} remove={async(id,cid)=>{if(confirm('Delete this image from your local library?'))await commit({...state,characters:state.characters.map(c=>c.id===cid?{...c,references:c.references.filter(r=>r.id!==id)}:c)})}}/>}
- {page==='Preset library'&&<Presets state={state} commit={commit}/>}
- <footer><span><Aperture size={13}/> CHARACTER STUDIO</span><span>Built for imagination. Designed for consistency.</span></footer></main></div>
- <input hidden type="file" accept="application/json,.json" ref={importRef} onChange={async e=>{const f=e.target.files?.[0];if(f)try{if(f.size>150*1024*1024)throw Error('Backup is too large (maximum 150 MB).');setBackup(parseBackup(await f.text()))}catch(err){notify(err instanceof Error?err.message:'Unable to read backup.')}e.target.value=''}}/>
- {modal&&<div className="modal-backdrop"><form className="modal" onSubmit={async e=>{e.preventDefault();const c={...modal,name:modal.name.trim()};if(!c.name)return;if(await commit({...state,characters:state.characters.some(x=>x.id===c.id)?state.characters.map(x=>x.id===c.id?c:x):[...state.characters,c]})){setSelected(c.id);setDetail(d=>d?.id===c.id?c:d);setModal(null);notify('Character saved.')}}}><div className="modal-heading"><div><span className="eyebrow">CHARACTER IDENTITY</span><h2>{state.characters.some(c=>c.id===modal.id)?'Edit character':'Someone new awaits.'}</h2></div><button type="button" className="icon-btn" aria-label="Close editor" onClick={()=>setModal(null)}><X/></button></div><label>Name<input required maxLength={80} value={modal.name} placeholder="e.g. Alex Morgan" onChange={e=>setModal({...modal,name:e.target.value})}/></label><label>Role / short description<input value={modal.role} maxLength={120} placeholder="e.g. Travel creator & visual storyteller" onChange={e=>setModal({...modal,role:e.target.value})}/></label><label>Biography<textarea value={modal.bio} placeholder="Their story, background, and creative world…" onChange={e=>setModal({...modal,bio:e.target.value})}/></label><label>Physical identity<textarea value={modal.identity} placeholder="Facial features, hair, skin tone, body proportions, distinguishing details…" onChange={e=>setModal({...modal,identity:e.target.value})}/></label><label>Personality & voice<textarea value={modal.personality} placeholder="Warm, curious, quietly confident…" onChange={e=>setModal({...modal,personality:e.target.value})}/></label><div className="swatches">{colors.map(color=><button type="button" key={color} aria-label={`Use ${color} profile color`} aria-pressed={modal.color===color} onClick={()=>setModal({...modal,color})} style={{background:color}}>{modal.color===color&&<Check size={16}/>}</button>)}</div><button className="primary" disabled={busy}>Save character <Check size={16}/></button></form></div>}
- {detail&&!modal&&<div className="modal-backdrop"><section className="modal detail"><div className="modal-heading"><div><span className="eyebrow">CHARACTER PROFILE</span><h2>{detail.name}</h2><p>{detail.role}</p></div><button className="icon-btn" aria-label="Close profile" onClick={()=>setDetail(null)}><X/></button></div><div className="detail-actions"><button className="secondary" onClick={()=>setModal(detail)}><Pencil size={14}/> Edit profile</button><button className="secondary" onClick={()=>{setSelected(detail.id);navigate('Prompt builder');setDetail(null)}}><WandSparkles size={14}/> Build a prompt</button><button className="icon-btn danger" aria-label="Delete character" onClick={async()=>{if(confirm(`Delete ${detail.name} and all their reference images?`)){if(await commit({...state,characters:state.characters.filter(c=>c.id!==detail.id)}))setDetail(null)}}}><Trash2 size={17}/></button></div><p>{detail.bio||'Add a biography to give this character a story.'}</p><div className="profile-facts"><div><small>PHYSICAL IDENTITY</small><p>{detail.identity||'No identity notes yet.'}</p></div><div><small>PERSONALITY</small><p>{detail.personality||'No personality notes yet.'}</p></div></div>{(['Face','Body'] as const).map(kind=><div key={kind}><div className="section-toolbar"><h3>{kind} references</h3><label className="secondary upload-label"><Upload size={14}/> Add images<input hidden type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple disabled={busy} onChange={e=>{upload(e.target.files,kind,detail);e.target.value=''}}/></label></div><div className="reference-grid">{detail.references.filter(r=>r.kind===kind).map(r=><div className="reference" key={r.id}><img src={r.data} alt={r.name}/><button aria-label={`Remove ${r.name}`} className="remove-image" onClick={async()=>{const updated={...detail,references:detail.references.filter(x=>x.id!==r.id)};if(await commit({...state,characters:state.characters.map(c=>c.id===detail.id?updated:c)}))setDetail(updated)}}><X size={13}/></button></div>)}{!detail.references.some(r=>r.kind===kind)&&<p className="empty-inline">Upload {kind.toLowerCase()} references to keep your character consistent.</p>}</div></div>)}</section></div>}
- {backup&&<div className="modal-backdrop"><section className="modal"><h2>Restore your studio?</h2><p>This backup contains {backup.characters.length} characters, {backup.history.length} prompts, and {backup.calendar.length} calendar entries. It will replace the studio on this device. Export your current data first if you want to keep it.</p><div className="detail-actions"><button className="secondary" onClick={exportBackup}>Export current data</button><button className="secondary" onClick={()=>setBackup(null)}>Cancel</button><button className="primary" disabled={busy} onClick={async()=>{if(await commit(backup)){setSelected(backup.characters[0]?.id??'');setBackup(null);setDetail(null);notify('Backup restored.')}}}>Replace & restore</button></div></section></div>}
- {toast&&<div className="toast" role="status"><Check size={17}/>{toast}</div>}</div>
+const navigation = [
+  { name: 'Characters', icon: Users },
+  { name: 'Prompt builder', icon: WandSparkles },
+  { name: 'Storyboards', icon: Clapperboard },
+  { name: 'Content calendar', icon: CalendarDays },
+  { name: 'Image gallery', icon: Image },
+  { name: 'Preset library', icon: SlidersHorizontal },
+];
+const colors = ['#c7c0ae', '#a4b1a2', '#b5a5b6', '#acb9c5', '#c6a48c'];
+function App() {
+  const [state, setState] = useState<State>(initial),
+    [loaded, setLoaded] = useState(false),
+    [fatal, setFatal] = useState(''),
+    [page, setPage] = useState('Characters'),
+    [selected, setSelected] = useState(''),
+    [query, setQuery] = useState(''),
+    [modal, setModal] = useState<Character | null>(null),
+    [detail, setDetail] = useState<Character | null>(null),
+    [toast, setToast] = useState(''),
+    [mobile, setMobile] = useState(false),
+    [backup, setBackup] = useState<State | null>(null),
+    [busy, setBusy] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
+  const stateRef = useRef(state);
+  const writing = useRef(false);
+  useEffect(() => {
+    readState()
+      .then((s) => {
+        setState(s);
+        stateRef.current = s;
+        setSelected(s.characters[0]?.id ?? '');
+        setLoaded(true);
+      })
+      .catch(() =>
+        setFatal(
+          'Local storage could not be opened. Enable IndexedDB in your browser and reload.',
+        ),
+      );
+  }, []);
+  const notify = (text: string) => {
+    setToast(text);
+    setTimeout(() => setToast(''), 3500);
+  };
+  async function commit(next: State) {
+    if (writing.current) {
+      notify('Please wait for the current save.');
+      return false;
+    }
+    writing.current = true;
+    setBusy(true);
+    try {
+      await saveState(next);
+      stateRef.current = next;
+      setState(next);
+      return true;
+    } catch {
+      notify(
+        'Could not save. Your storage may be full. Export a backup and free space.',
+      );
+      return false;
+    } finally {
+      writing.current = false;
+      setBusy(false);
+    }
+  }
+  const current =
+    state.characters.find((c) => c.id === selected) ?? state.characters[0];
+  const navigate = (name: string) => {
+    setPage(name);
+    setMobile(false);
+    setQuery('');
+  };
+  const newCharacter = () =>
+    setModal({
+      id: uid(),
+      name: '',
+      role: '',
+      bio: '',
+      identity: '',
+      personality: '',
+      color: colors[state.characters.length % colors.length],
+      references: [],
+    });
+  async function copy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      notify('Prompt copied. Paste it into ChatGPT with your references.');
+    } catch {
+      notify(
+        'Clipboard unavailable. Select the prompt text and copy it manually.',
+      );
+    }
+  }
+  async function upload(
+    files: FileList | null,
+    kind: Reference['kind'],
+    character: Character,
+    prompt = '',
+  ) {
+    if (!files?.length) return;
+    setBusy(true);
+    try {
+      const refs: Reference[] = [];
+      for (const file of Array.from(files)) {
+        if (
+          !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(
+            file.type,
+          ) ||
+          file.size > 8 * 1024 * 1024
+        )
+          throw Error('Use PNG, JPEG, WebP, or GIF images up to 8 MB each.');
+        const data = await new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result));
+          r.onerror = reject;
+          r.readAsDataURL(file);
+        });
+        refs.push({ id: uid(), name: file.name, kind, data, prompt });
+      }
+      const fresh = stateRef.current;
+      const c = fresh.characters.find((x) => x.id === character.id);
+      if (!c) throw Error('Character no longer exists.');
+      const updated = { ...c, references: [...c.references, ...refs] };
+      if (
+        await commit({
+          ...fresh,
+          characters: fresh.characters.map((x) =>
+            x.id === c.id ? updated : x,
+          ),
+        })
+      ) {
+        setDetail((d) => (d?.id === updated.id ? updated : d));
+        notify('Images added to your local library.');
+      }
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Image upload failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  function exportBackup() {
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }),
+    );
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `character-studio-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  if (fatal) return <div className="loading">{fatal}</div>;
+  if (!loaded)
+    return (
+      <div className="loading">
+        <Aperture /> Opening your studio…
+      </div>
+    );
+  return (
+    <div className="app">
+      <aside className={mobile ? 'sidebar open' : 'sidebar'}>
+        <a
+          className="brand"
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            navigate('Characters');
+          }}
+        >
+          <span className="brand-icon">
+            <Aperture size={25} />
+          </span>
+          <span>
+            character<span className="brand-sub">STUDIO</span>
+          </span>
+        </a>
+        <div className="workspace">
+          <span className="workspace-icon">P</span>
+          <div>
+            Personal workspace<small>YOUR CREATIVE SPACE</small>
+          </div>
+          <ChevronRight size={14} />
+        </div>
+        <p className="nav-label">WORKSPACE</p>
+        <nav>
+          {navigation.map((n) => (
+            <button
+              key={n.name}
+              className={page === n.name ? 'active' : ''}
+              onClick={() => navigate(n.name)}
+            >
+              <n.icon size={18} />
+              {n.name}
+              {n.name === 'Characters' && (
+                <span className="nav-count">{state.characters.length}</span>
+              )}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="local-note">
+            <HardDrive size={17} />
+            <div>
+              Made to stay yours<small>Stored on this device. No cloud.</small>
+            </div>
+            <span className="green-dot" />
+          </div>
+          <div className="backup-actions">
+            <button onClick={exportBackup}>
+              <Download size={14} /> Export backup
+            </button>
+            <button onClick={() => importRef.current?.click()}>
+              <Upload size={14} /> Import
+            </button>
+          </div>
+          <div className="user">
+            <div className="avatar">Y</div>
+            <div>
+              Your studio<small>LOCAL WORKSPACE</small>
+            </div>
+            <span className="free-tag">FREE</span>
+          </div>
+        </div>
+      </aside>
+      <div className="main-shell">
+        <header className="topbar">
+          <button
+            className="mobile-toggle icon-btn"
+            aria-label="Toggle navigation"
+            onClick={() => setMobile(!mobile)}
+          >
+            <Menu />
+          </button>
+          <span className="breadcrumb">
+            Workspace <ChevronRight size={13} /> <strong>{page}</strong>
+          </span>
+          <span className="private-label">
+            <span className="green-dot" /> Local & private
+          </span>
+        </header>
+        <main>
+          <div className="page-heading">
+            <div>
+              <div className="eyebrow">YOUR CREATIVE UNIVERSE</div>
+              <h1>
+                {page === 'Characters'
+                  ? 'Meet your characters.'
+                  : page === 'Prompt builder'
+                    ? 'A vision, put into words.'
+                    : page === 'Storyboards'
+                      ? 'Every frame tells a story.'
+                      : page === 'Content calendar'
+                        ? 'Make room for inspiration.'
+                        : page === 'Image gallery'
+                          ? 'Your creative archive.'
+                          : 'The details make the image.'}
+              </h1>
+              <p>
+                {page === 'Characters'
+                  ? 'Build a consistent identity. Bring every idea to life.'
+                  : page === 'Prompt builder'
+                    ? 'Craft identity-aware photography prompts, ready for ChatGPT.'
+                    : page === 'Storyboards'
+                      ? 'Turn a scene into a cinematic sequence of shot prompts.'
+                      : page === 'Content calendar'
+                        ? 'Plan your character’s next appearance.'
+                        : page === 'Image gallery'
+                          ? 'Keep your images and the prompts behind them, together.'
+                          : 'A curated starting point for your next creative direction.'}
+              </p>
+            </div>
+            {page === 'Characters' && (
+              <button className="primary" onClick={newCharacter}>
+                <Plus size={17} /> New character
+              </button>
+            )}
+          </div>
+          {page === 'Characters' && (
+            <>
+              <section className="hero">
+                <div className="hero-copy">
+                  <span className="pill">
+                    <Sparkles size={12} /> THE CHARACTER WORKSPACE
+                  </span>
+                  <h2>
+                    One identity.
+                    <br />
+                    Infinite possibilities.
+                  </h2>
+                  <p>
+                    From the first reference to the final frame.
+                    <br />A home for the characters you create.
+                  </p>
+                  <button onClick={() => navigate('Prompt builder')}>
+                    Open prompt builder <ArrowUpRight size={16} />
+                  </button>
+                </div>
+                <div className="hero-art" aria-hidden="true">
+                  <div className="orb orb-back" />
+                  <div className="art-card card-back">
+                    <span>THE MOOD</span>
+                    <div className="abstract-sun" />
+                  </div>
+                  <div className="art-card card-front">
+                    <div className="abstract-portrait">
+                      <div className="portrait-head" />
+                      <div className="portrait-body" />
+                    </div>
+                    <div className="art-caption">
+                      <span>CHARACTER STUDY</span>
+                      <Aperture size={15} />
+                    </div>
+                  </div>
+                  <span className="art-coordinate">
+                    IDENTITY / EXPRESSION / POSSIBILITY
+                  </span>
+                  <div className="art-spark">✳</div>
+                </div>
+              </section>
+              <div className="section-toolbar">
+                <div className="section-title">
+                  Your characters{' '}
+                  <span>
+                    {state.characters.length.toString().padStart(2, '0')}
+                  </span>
+                </div>
+                <label className="search">
+                  <Search size={16} />
+                  <input
+                    placeholder="Search characters…"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                </label>
+              </div>
+              <div className="character-grid">
+                {state.characters
+                  .filter((c) =>
+                    (c.name + ' ' + c.role)
+                      .toLowerCase()
+                      .includes(query.toLowerCase()),
+                  )
+                  .map((c) => (
+                    <button
+                      className="character-card"
+                      key={c.id}
+                      onClick={() => setDetail(c)}
+                    >
+                      <div
+                        className="character-visual"
+                        style={{ background: c.color }}
+                      >
+                        {c.references.find((r) => r.kind === 'Face') ? (
+                          <img
+                            src={
+                              c.references.find((r) => r.kind === 'Face')!.data
+                            }
+                            alt={c.name}
+                          />
+                        ) : (
+                          <div className="initial-portrait">
+                            <Users size={55} strokeWidth={1} />
+                            <span>Add a face reference</span>
+                          </div>
+                        )}
+                        <span className="image-badge">
+                          <Camera size={12} />
+                          {c.references.length} references
+                        </span>
+                        <span className="card-arrow">
+                          <ArrowUpRight size={17} />
+                        </span>
+                      </div>
+                      <div className="character-info">
+                        <h3>{c.name}</h3>
+                        <p>{c.role || 'An identity waiting to unfold'}</p>
+                        <div>
+                          <span className="status-dot" /> Character profile{' '}
+                          <span className="character-initial">
+                            {c.name.slice(0, 1).toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                <button className="new-card" onClick={newCharacter}>
+                  <span className="plus-circle">
+                    <Plus size={26} />
+                  </span>
+                  <h3>
+                    {state.characters.length
+                      ? 'Create a new character'
+                      : 'Your first character starts here'}
+                  </h3>
+                  <p>
+                    A new face. A new story.
+                    <br />
+                    Make someone unforgettable.
+                  </p>
+                  <span className="new-card-link">
+                    Create character <ArrowUpRight size={14} />
+                  </span>
+                </button>
+              </div>
+              <div className="workflow-note">
+                <span className="note-icon">
+                  <WandSparkles size={19} />
+                </span>
+                <div>
+                  <strong>Your imagination. Your workflow.</strong>
+                  <p>
+                    Build prompts here, create in ChatGPT, and bring your images
+                    back to the studio.
+                  </p>
+                </div>
+                <span className="note-tag">NO API KEYS NEEDED</span>
+              </div>
+            </>
+          )}
+          {page === 'Prompt builder' && (
+            <PromptBuilder
+              current={current}
+              characters={state.characters}
+              selected={selected}
+              setSelected={setSelected}
+              presets={state.presets}
+              copy={copy}
+              save={async (text) => {
+                if (
+                  await commit({
+                    ...state,
+                    history: [
+                      {
+                        id: uid(),
+                        text,
+                        date: new Date().toISOString(),
+                        character: current?.name ?? '',
+                      },
+                      ...state.history,
+                    ],
+                  })
+                )
+                  notify('Prompt saved to history.');
+              }}
+              history={state.history}
+              savedTemplate={state.template}
+              saveTemplate={async (template) => {
+                if (await commit({ ...state, template }))
+                  notify('Template saved to your studio.');
+              }}
+            />
+          )}
+          {page === 'Storyboards' && (
+            <Storyboard
+              current={current}
+              characters={state.characters}
+              selected={selected}
+              setSelected={setSelected}
+              copy={copy}
+            />
+          )}
+          {page === 'Content calendar' && (
+            <Calendar state={state} commit={commit} notify={notify} />
+          )}
+          {page === 'Image gallery' && (
+            <Gallery
+              state={state}
+              current={current}
+              selected={selected}
+              setSelected={setSelected}
+              upload={upload}
+              busy={busy}
+              copy={copy}
+              remove={async (id, cid) => {
+                if (confirm('Delete this image from your local library?'))
+                  await commit({
+                    ...state,
+                    characters: state.characters.map((c) =>
+                      c.id === cid
+                        ? {
+                            ...c,
+                            references: c.references.filter((r) => r.id !== id),
+                          }
+                        : c,
+                    ),
+                  });
+              }}
+            />
+          )}
+          {page === 'Preset library' && (
+            <Presets state={state} commit={commit} />
+          )}
+          <footer>
+            <span>
+              <Aperture size={13} /> CHARACTER STUDIO
+            </span>
+            <span>Built for imagination. Designed for consistency.</span>
+          </footer>
+        </main>
+      </div>
+      <input
+        hidden
+        type="file"
+        accept="application/json,.json"
+        ref={importRef}
+        onChange={async (e) => {
+          const f = e.target.files?.[0];
+          if (f)
+            try {
+              if (f.size > 150 * 1024 * 1024)
+                throw Error('Backup is too large (maximum 150 MB).');
+              setBackup(parseBackup(await f.text()));
+            } catch (err) {
+              notify(
+                err instanceof Error ? err.message : 'Unable to read backup.',
+              );
+            }
+          e.target.value = '';
+        }}
+      />
+      {modal && (
+        <div className="modal-backdrop">
+          <form
+            className="modal"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const c = { ...modal, name: modal.name.trim() };
+              if (!c.name) return;
+              if (
+                await commit({
+                  ...state,
+                  characters: state.characters.some((x) => x.id === c.id)
+                    ? state.characters.map((x) => (x.id === c.id ? c : x))
+                    : [...state.characters, c],
+                })
+              ) {
+                setSelected(c.id);
+                setDetail((d) => (d?.id === c.id ? c : d));
+                setModal(null);
+                notify('Character saved.');
+              }
+            }}
+          >
+            <div className="modal-heading">
+              <div>
+                <span className="eyebrow">CHARACTER IDENTITY</span>
+                <h2>
+                  {state.characters.some((c) => c.id === modal.id)
+                    ? 'Edit character'
+                    : 'Someone new awaits.'}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="Close editor"
+                onClick={() => setModal(null)}
+              >
+                <X />
+              </button>
+            </div>
+            <label>
+              Name
+              <input
+                required
+                maxLength={80}
+                value={modal.name}
+                placeholder="e.g. Alex Morgan"
+                onChange={(e) => setModal({ ...modal, name: e.target.value })}
+              />
+            </label>
+            <label>
+              Role / short description
+              <input
+                value={modal.role}
+                maxLength={120}
+                placeholder="e.g. Travel creator & visual storyteller"
+                onChange={(e) => setModal({ ...modal, role: e.target.value })}
+              />
+            </label>
+            <label>
+              Biography
+              <textarea
+                value={modal.bio}
+                placeholder="Their story, background, and creative world…"
+                onChange={(e) => setModal({ ...modal, bio: e.target.value })}
+              />
+            </label>
+            <label>
+              Physical identity
+              <textarea
+                value={modal.identity}
+                placeholder="Facial features, hair, skin tone, body proportions, distinguishing details…"
+                onChange={(e) =>
+                  setModal({ ...modal, identity: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              Personality & voice
+              <textarea
+                value={modal.personality}
+                placeholder="Warm, curious, quietly confident…"
+                onChange={(e) =>
+                  setModal({ ...modal, personality: e.target.value })
+                }
+              />
+            </label>
+            <div className="swatches">
+              {colors.map((color) => (
+                <button
+                  type="button"
+                  key={color}
+                  aria-label={`Use ${color} profile color`}
+                  aria-pressed={modal.color === color}
+                  onClick={() => setModal({ ...modal, color })}
+                  style={{ background: color }}
+                >
+                  {modal.color === color && <Check size={16} />}
+                </button>
+              ))}
+            </div>
+            <button className="primary" disabled={busy}>
+              Save character <Check size={16} />
+            </button>
+          </form>
+        </div>
+      )}
+      {detail && !modal && (
+        <div className="modal-backdrop">
+          <section className="modal detail">
+            <div className="modal-heading">
+              <div>
+                <span className="eyebrow">CHARACTER PROFILE</span>
+                <h2>{detail.name}</h2>
+                <p>{detail.role}</p>
+              </div>
+              <button
+                className="icon-btn"
+                aria-label="Close profile"
+                onClick={() => setDetail(null)}
+              >
+                <X />
+              </button>
+            </div>
+            <div className="detail-actions">
+              <button className="secondary" onClick={() => setModal(detail)}>
+                <Pencil size={14} /> Edit profile
+              </button>
+              <button
+                className="secondary"
+                onClick={() => {
+                  setSelected(detail.id);
+                  navigate('Prompt builder');
+                  setDetail(null);
+                }}
+              >
+                <WandSparkles size={14} /> Build a prompt
+              </button>
+              <button
+                className="icon-btn danger"
+                aria-label="Delete character"
+                onClick={async () => {
+                  if (
+                    confirm(
+                      `Delete ${detail.name} and all their reference images?`,
+                    )
+                  ) {
+                    if (
+                      await commit({
+                        ...state,
+                        characters: state.characters.filter(
+                          (c) => c.id !== detail.id,
+                        ),
+                      })
+                    )
+                      setDetail(null);
+                  }
+                }}
+              >
+                <Trash2 size={17} />
+              </button>
+            </div>
+            <p>
+              {detail.bio || 'Add a biography to give this character a story.'}
+            </p>
+            <div className="profile-facts">
+              <div>
+                <small>PHYSICAL IDENTITY</small>
+                <p>{detail.identity || 'No identity notes yet.'}</p>
+              </div>
+              <div>
+                <small>PERSONALITY</small>
+                <p>{detail.personality || 'No personality notes yet.'}</p>
+              </div>
+            </div>
+            {(['Face', 'Body'] as const).map((kind) => (
+              <div key={kind}>
+                <div className="section-toolbar">
+                  <h3>{kind} references</h3>
+                  <label className="secondary upload-label">
+                    <Upload size={14} /> Add images
+                    <input
+                      hidden
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      multiple
+                      disabled={busy}
+                      onChange={(e) => {
+                        upload(e.target.files, kind, detail);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                </div>
+                <div className="reference-grid">
+                  {detail.references
+                    .filter((r) => r.kind === kind)
+                    .map((r) => (
+                      <div className="reference" key={r.id}>
+                        <img src={r.data} alt={r.name} />
+                        <button
+                          aria-label={`Remove ${r.name}`}
+                          className="remove-image"
+                          onClick={async () => {
+                            const updated = {
+                              ...detail,
+                              references: detail.references.filter(
+                                (x) => x.id !== r.id,
+                              ),
+                            };
+                            if (
+                              await commit({
+                                ...state,
+                                characters: state.characters.map((c) =>
+                                  c.id === detail.id ? updated : c,
+                                ),
+                              })
+                            )
+                              setDetail(updated);
+                          }}
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  {!detail.references.some((r) => r.kind === kind) && (
+                    <p className="empty-inline">
+                      Upload {kind.toLowerCase()} references to keep your
+                      character consistent.
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </section>
+        </div>
+      )}
+      {backup && (
+        <div className="modal-backdrop">
+          <section className="modal">
+            <h2>Restore your studio?</h2>
+            <p>
+              This backup contains {backup.characters.length} characters,{' '}
+              {backup.history.length} prompts, and {backup.calendar.length}{' '}
+              calendar entries. It will replace the studio on this device.
+              Export your current data first if you want to keep it.
+            </p>
+            <div className="detail-actions">
+              <button className="secondary" onClick={exportBackup}>
+                Export current data
+              </button>
+              <button className="secondary" onClick={() => setBackup(null)}>
+                Cancel
+              </button>
+              <button
+                className="primary"
+                disabled={busy}
+                onClick={async () => {
+                  if (await commit(backup)) {
+                    setSelected(backup.characters[0]?.id ?? '');
+                    setBackup(null);
+                    setDetail(null);
+                    notify('Backup restored.');
+                  }
+                }}
+              >
+                Replace & restore
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {toast && (
+        <div className="toast" role="status">
+          <Check size={17} />
+          {toast}
+        </div>
+      )}
+    </div>
+  );
 }
-function CharacterSelect({characters,selected,setSelected}:{characters:Character[];selected:string;setSelected:(s:string)=>void}){return <label>Character<select value={characters.some(c=>c.id===selected)?selected:characters[0]?.id??''} onChange={e=>setSelected(e.target.value)}>{characters.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
-function NeedCharacter(){return <div className="empty-state"><Users size={36}/><h2>Start with an identity.</h2><p>Create a character in the Characters tab to begin.</p></div>}
-function PromptBuilder({current,characters,selected,setSelected,presets,copy,save,history,savedTemplate,saveTemplate}:{current?:Character;characters:Character[];selected:string;setSelected:(s:string)=>void;presets:State['presets'];copy:(s:string)=>void;save:(s:string)=>Promise<void>;history:State['history'];savedTemplate?:string;saveTemplate:(s:string)=>Promise<void>}){
- const [values,setValues]=useState<Record<string,string>>({outfit:presets.Outfit[0]??'',location:presets.Location[0]??'',lighting:presets.Lighting[0]??'',pose:presets.Pose[0]??'',details:'Shot on an 85mm portrait lens, shallow depth of field.'});const [template,setTemplate]=useState(savedTemplate??defaultTemplate),[editing,setEditing]=useState(false);
- if(!current)return <NeedCharacter/>;const prompt=renderPrompt(template,{...values,name:current.name,identity:current.identity||'Use the attached character references as the source of truth.',personality:current.personality||'Natural and authentic'});
- return <><div className="builder-grid"><section className="panel"><div className="panel-title"><WandSparkles size={18}/><h3>Creative direction</h3></div><CharacterSelect {...{characters,selected,setSelected}}/>{['Outfit','Location','Lighting','Pose'].map(k=><label key={k}>{k}<input list={`preset-${k}`} value={values[k.toLowerCase()]} onChange={e=>setValues({...values,[k.toLowerCase()]:e.target.value})}/><datalist id={`preset-${k}`}>{presets[k].map(v=><option key={v} value={v}/>)}</datalist></label>)}<label>Camera & extra direction<textarea value={values.details} onChange={e=>setValues({...values,details:e.target.value})}/></label><button className="text-button" onClick={()=>setEditing(!editing)}><Pencil size={14}/>{editing?'Close template editor':'Edit prompt template'}</button>{editing&&<label>Template (editable)<textarea className="template-editor" value={template} onChange={e=>setTemplate(e.target.value)}/><small>Variables: name, identity, personality, outfit, location, lighting, pose, details. Wrap them in double braces.</small><div className="detail-actions"><button className="secondary" onClick={()=>saveTemplate(template)}>Save template</button><button className="text-button" onClick={()=>setTemplate(defaultTemplate)}>Reset template</button></div></label>}</section><section className="panel prompt-panel"><div className="panel-title"><span className="green-dot"/><h3>Your photography prompt</h3><span className="tiny-tag">LIVE PREVIEW</span></div><textarea className="prompt-output" aria-label="Generated photography prompt" readOnly value={prompt}/><div className="prompt-actions"><button className="primary" onClick={()=>copy(prompt)}><Copy size={15}/> Copy prompt</button><button className="secondary" onClick={()=>save(prompt)}>Save to history</button></div><div className="info-note">Paste into ChatGPT and attach your face and body reference images. This studio builds prompts locally and does not connect to ChatGPT Plus.</div></section></div><h3 className="history-heading">Prompt history <span>{history.length}</span></h3>{!history.length&&<p className="muted">Saved prompts will appear here.</p>}{history.map(h=><details className="history-item" key={h.id}><summary>{h.character} <span>{new Date(h.date).toLocaleString()}</span></summary><pre>{h.text}</pre><button className="secondary" onClick={()=>copy(h.text)}><Copy size={14}/> Copy</button></details>)}</>
+function CharacterSelect({
+  characters,
+  selected,
+  setSelected,
+}: {
+  characters: Character[];
+  selected: string;
+  setSelected: (s: string) => void;
+}) {
+  return (
+    <label>
+      Character
+      <select
+        value={
+          characters.some((c) => c.id === selected)
+            ? selected
+            : (characters[0]?.id ?? '')
+        }
+        onChange={(e) => setSelected(e.target.value)}
+      >
+        {characters.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
-function Storyboard({current,characters,selected,setSelected,copy}:{current?:Character;characters:Character[];selected:string;setSelected:(s:string)=>void;copy:(s:string)=>void}){const [scene,setScene]=useState('A quiet morning in a sunlit city, from a neighborhood café to an open rooftop.'),[mood,setMood]=useState('Warm, contemplative, cinematic'),[count,setCount]=useState(4);if(!current)return <NeedCharacter/>;const angles=['Wide establishing shot, slow dolly in','Medium tracking shot at eye level','Close-up portrait, subtle push in','Over-the-shoulder shot, gentle pan','Low angle full body shot, slow orbit','Wide closing shot, gradual pull back'];const shots=Array.from({length:count},(_,i)=>`SHOT ${i+1} · 4 seconds\n${angles[i]}.\n${current.name}: ${current.identity||'Match the attached face and body reference images exactly.'}\nScene: ${scene}\nMood: ${mood}. Personality: ${current.personality||'Natural and expressive'}.\nMaintain identical face, body proportions, wardrobe, lighting continuity and screen direction across shots. Natural motion, believable anatomy. No text or watermarks.`);return <div className="builder-grid"><section className="panel"><div className="panel-title"><Clapperboard size={18}/><h3>Scene direction</h3></div><CharacterSelect {...{characters,selected,setSelected}}/><label>Scene<textarea value={scene} onChange={e=>setScene(e.target.value)}/></label><label>Mood<input value={mood} onChange={e=>setMood(e.target.value)}/></label><label>Number of shots<select value={count} onChange={e=>setCount(Number(e.target.value))}>{[3,4,5,6].map(n=><option key={n}>{n}</option>)}</select></label><button className="primary" onClick={()=>copy(shots.join('\n\n'))}><Copy size={15}/> Copy storyboard</button><p className="muted">Prompts update as you write. Copy individual shots into your preferred creative workflow.</p></section><div className="shot-list">{shots.map((shot,i)=><section className="panel" key={i}><div className="panel-title"><span className="shot-number">{String(i+1).padStart(2,'0')}</span><h3>{angles[i].split(',')[0]}</h3><button className="icon-btn" aria-label={`Copy shot ${i+1}`} onClick={()=>copy(shot)}><Copy size={15}/></button></div><pre>{shot}</pre></section>)}</div></div>}
-function Calendar({state,commit,notify}:{state:State;commit:(s:State)=>Promise<boolean>;notify:(s:string)=>void}){const [title,setTitle]=useState(''),[date,setDate]=useState(new Date().toLocaleDateString('en-CA')),[platform,setPlatform]=useState('Instagram'),[character,setCharacter]=useState(state.characters[0]?.name??'');return <><form className="panel calendar-form" onSubmit={async e=>{e.preventDefault();if(!title.trim())return;if(await commit({...state,calendar:[...state.calendar,{id:uid(),date,title:title.trim(),platform,character}]})){setTitle('');notify('Content added to your calendar.')}}}><label>Content idea<input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="Golden hour portrait series"/></label><label>Date<input required type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>Platform<select value={platform} onChange={e=>setPlatform(e.target.value)}>{['Instagram','TikTok','YouTube','Other'].map(p=><option key={p}>{p}</option>)}</select></label><label>Character<select value={character} onChange={e=>setCharacter(e.target.value)}><option value="">Unassigned</option>{state.characters.map(c=><option key={c.id}>{c.name}</option>)}</select></label><button className="primary"><Plus size={16}/> Add idea</button></form><div className="calendar-list">{state.calendar.length===0?<div className="empty-state"><CalendarDays size={36}/><h2>A little space to plan.</h2><p>Add your first content idea above.</p></div>:[...state.calendar].sort((a,b)=>a.date.localeCompare(b.date)).map(e=><div className="calendar-entry" key={e.id}><div className="date-block"><small>{new Date(e.date+'T12:00:00').toLocaleDateString(undefined,{month:'short'})}</small><strong>{e.date.slice(-2)}</strong></div><div><span className="eyebrow">{e.platform} {e.character&&` / ${e.character}`}</span><h3>{e.title}</h3></div><button className="icon-btn danger" aria-label={`Delete ${e.title}`} onClick={()=>commit({...state,calendar:state.calendar.filter(x=>x.id!==e.id)})}><Trash2 size={16}/></button></div>)}</div></>}
-function Gallery({state,current,selected,setSelected,upload,busy,copy,remove}:{state:State;current?:Character;selected:string;setSelected:(s:string)=>void;upload:(f:FileList|null,k:Reference['kind'],c:Character,p?:string)=>void;busy:boolean;copy:(s:string)=>void;remove:(id:string,cid:string)=>void}){const [prompt,setPrompt]=useState(''),[view,setView]=useState<Reference|null>(null);if(!current)return <NeedCharacter/>;const images=current.references;return <><section className="panel gallery-import"><CharacterSelect characters={state.characters} selected={selected} setSelected={setSelected}/><label>Prompt used (optional)<input value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="Keep the creative direction with your image"/></label><label className="primary upload-label"><Upload size={16}/>{busy?'Saving…':'Import images'}<input disabled={busy} hidden type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={e=>{upload(e.target.files,'Gallery',current,prompt);e.target.value=''}}/></label></section><div className="gallery-grid">{images.map(r=><article className="gallery-image" key={r.id}><button onClick={()=>setView(r)}><img src={r.data} alt={r.name}/></button><div><span title={r.name}>{r.name}</span><button className="icon-btn danger" aria-label={`Delete ${r.name}`} onClick={()=>remove(r.id,current.id)}><Trash2 size={14}/></button></div><small>{r.kind==='Gallery'?'IMPORTED IMAGE':r.kind.toUpperCase()+' REFERENCE'}</small></article>)}</div>{!images.length&&<div className="empty-state"><Image size={36}/><h2>A gallery waiting to happen.</h2><p>Import your generated images or add character references.</p></div>}{view&&<div className="modal-backdrop"><section className="modal image-modal"><div className="modal-heading"><h3>{view.name}</h3><button aria-label="Close image" className="icon-btn" onClick={()=>setView(null)}><X/></button></div><img src={view.data} alt={view.name}/><pre>{view.prompt||'No prompt was attached to this image.'}</pre>{view.prompt&&<button className="secondary" onClick={()=>copy(view.prompt)}><Copy size={14}/> Copy prompt</button>}<a className="secondary" href={view.data} download={view.name}><Download size={14}/> Download image</a></section></div>}</>}
-function Presets({state,commit}:{state:State;commit:(s:State)=>Promise<boolean>}){const [category,setCategory]=useState('Outfit'),[value,setValue]=useState('');return <><form className="panel preset-form" onSubmit={async e=>{e.preventDefault();const v=value.trim();if(v&&!state.presets[category].includes(v)&&await commit({...state,presets:{...state.presets,[category]:[...state.presets[category],v]}}))setValue('')}}><label>Category<select value={category} onChange={e=>setCategory(e.target.value)}>{Object.keys(state.presets).map(k=><option key={k}>{k}</option>)}</select></label><label>Your preset<input required value={value} onChange={e=>setValue(e.target.value)} placeholder="Describe a look, place, light, or pose…"/></label><button className="primary"><Plus size={16}/> Add preset</button></form><div className="preset-grid">{Object.entries(state.presets).map(([key,values])=><section className="panel" key={key}><div className="panel-title"><SlidersHorizontal size={17}/><h3>{key}</h3><span className="tiny-tag">{values.length}</span></div>{values.map(v=><div className="preset-item" key={v}><span>{v}</span><button className="icon-btn" aria-label={`Delete preset ${v}`} onClick={()=>commit({...state,presets:{...state.presets,[key]:values.filter(x=>x!==v)}})}><X size={14}/></button></div>)}{!values.length&&<p className="muted">Add a preset above.</p>}</section>)}</div></>}
-createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
+function NeedCharacter() {
+  return (
+    <div className="empty-state">
+      <Users size={36} />
+      <h2>Start with an identity.</h2>
+      <p>Create a character in the Characters tab to begin.</p>
+    </div>
+  );
+}
+function PromptBuilder({
+  current,
+  characters,
+  selected,
+  setSelected,
+  presets,
+  copy,
+  save,
+  history,
+  savedTemplate,
+  saveTemplate,
+}: {
+  current?: Character;
+  characters: Character[];
+  selected: string;
+  setSelected: (s: string) => void;
+  presets: State['presets'];
+  copy: (s: string) => void;
+  save: (s: string) => Promise<void>;
+  history: State['history'];
+  savedTemplate?: string;
+  saveTemplate: (s: string) => Promise<void>;
+}) {
+  const [values, setValues] = useState<Record<string, string>>({
+    outfit: presets.Outfit[0] ?? '',
+    location: presets.Location[0] ?? '',
+    lighting: presets.Lighting[0] ?? '',
+    pose: presets.Pose[0] ?? '',
+    details: 'Shot on an 85mm portrait lens, shallow depth of field.',
+  });
+  const [template, setTemplate] = useState(savedTemplate ?? defaultTemplate),
+    [editing, setEditing] = useState(false);
+  if (!current) return <NeedCharacter />;
+  const prompt = renderPrompt(template, {
+    ...values,
+    name: current.name,
+    identity:
+      current.identity ||
+      'Use the attached character references as the source of truth.',
+    personality: current.personality || 'Natural and authentic',
+  });
+  return (
+    <>
+      <div className="builder-grid">
+        <section className="panel">
+          <div className="panel-title">
+            <WandSparkles size={18} />
+            <h3>Creative direction</h3>
+          </div>
+          <CharacterSelect {...{ characters, selected, setSelected }} />
+          {['Outfit', 'Location', 'Lighting', 'Pose'].map((k) => (
+            <label key={k}>
+              {k}
+              <input
+                list={`preset-${k}`}
+                value={values[k.toLowerCase()]}
+                onChange={(e) =>
+                  setValues({ ...values, [k.toLowerCase()]: e.target.value })
+                }
+              />
+              <datalist id={`preset-${k}`}>
+                {presets[k].map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
+            </label>
+          ))}
+          <label>
+            Camera & extra direction
+            <textarea
+              value={values.details}
+              onChange={(e) =>
+                setValues({ ...values, details: e.target.value })
+              }
+            />
+          </label>
+          <button className="text-button" onClick={() => setEditing(!editing)}>
+            <Pencil size={14} />
+            {editing ? 'Close template editor' : 'Edit prompt template'}
+          </button>
+          {editing && (
+            <label>
+              Template (editable)
+              <textarea
+                className="template-editor"
+                value={template}
+                onChange={(e) => setTemplate(e.target.value)}
+              />
+              <small>
+                Variables: name, identity, personality, outfit, location,
+                lighting, pose, details. Wrap them in double braces.
+              </small>
+              <div className="detail-actions">
+                <button
+                  className="secondary"
+                  onClick={() => saveTemplate(template)}
+                >
+                  Save template
+                </button>
+                <button
+                  className="text-button"
+                  onClick={() => setTemplate(defaultTemplate)}
+                >
+                  Reset template
+                </button>
+              </div>
+            </label>
+          )}
+        </section>
+        <section className="panel prompt-panel">
+          <div className="panel-title">
+            <span className="green-dot" />
+            <h3>Your photography prompt</h3>
+            <span className="tiny-tag">LIVE PREVIEW</span>
+          </div>
+          <textarea
+            className="prompt-output"
+            aria-label="Generated photography prompt"
+            readOnly
+            value={prompt}
+          />
+          <div className="prompt-actions">
+            <button className="primary" onClick={() => copy(prompt)}>
+              <Copy size={15} /> Copy prompt
+            </button>
+            <button className="secondary" onClick={() => save(prompt)}>
+              Save to history
+            </button>
+          </div>
+          <div className="info-note">
+            Paste into ChatGPT and attach your face and body reference images.
+            This studio builds prompts locally and does not connect to ChatGPT
+            Plus.
+          </div>
+        </section>
+      </div>
+      <h3 className="history-heading">
+        Prompt history <span>{history.length}</span>
+      </h3>
+      {!history.length && (
+        <p className="muted">Saved prompts will appear here.</p>
+      )}
+      {history.map((h) => (
+        <details className="history-item" key={h.id}>
+          <summary>
+            {h.character} <span>{new Date(h.date).toLocaleString()}</span>
+          </summary>
+          <pre>{h.text}</pre>
+          <button className="secondary" onClick={() => copy(h.text)}>
+            <Copy size={14} /> Copy
+          </button>
+        </details>
+      ))}
+    </>
+  );
+}
+function Storyboard({
+  current,
+  characters,
+  selected,
+  setSelected,
+  copy,
+}: {
+  current?: Character;
+  characters: Character[];
+  selected: string;
+  setSelected: (s: string) => void;
+  copy: (s: string) => void;
+}) {
+  const [scene, setScene] = useState(
+      'A quiet morning in a sunlit city, from a neighborhood café to an open rooftop.',
+    ),
+    [mood, setMood] = useState('Warm, contemplative, cinematic'),
+    [count, setCount] = useState(4);
+  if (!current) return <NeedCharacter />;
+  const angles = [
+    'Wide establishing shot, slow dolly in',
+    'Medium tracking shot at eye level',
+    'Close-up portrait, subtle push in',
+    'Over-the-shoulder shot, gentle pan',
+    'Low angle full body shot, slow orbit',
+    'Wide closing shot, gradual pull back',
+  ];
+  const shots = Array.from(
+    { length: count },
+    (_, i) =>
+      `SHOT ${i + 1} · 4 seconds\n${angles[i]}.\n${current.name}: ${current.identity || 'Match the attached face and body reference images exactly.'}\nScene: ${scene}\nMood: ${mood}. Personality: ${current.personality || 'Natural and expressive'}.\nMaintain identical face, body proportions, wardrobe, lighting continuity and screen direction across shots. Natural motion, believable anatomy. No text or watermarks.`,
+  );
+  return (
+    <div className="builder-grid">
+      <section className="panel">
+        <div className="panel-title">
+          <Clapperboard size={18} />
+          <h3>Scene direction</h3>
+        </div>
+        <CharacterSelect {...{ characters, selected, setSelected }} />
+        <label>
+          Scene
+          <textarea value={scene} onChange={(e) => setScene(e.target.value)} />
+        </label>
+        <label>
+          Mood
+          <input value={mood} onChange={(e) => setMood(e.target.value)} />
+        </label>
+        <label>
+          Number of shots
+          <select
+            value={count}
+            onChange={(e) => setCount(Number(e.target.value))}
+          >
+            {[3, 4, 5, 6].map((n) => (
+              <option key={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <button className="primary" onClick={() => copy(shots.join('\n\n'))}>
+          <Copy size={15} /> Copy storyboard
+        </button>
+        <p className="muted">
+          Prompts update as you write. Copy individual shots into your preferred
+          creative workflow.
+        </p>
+      </section>
+      <div className="shot-list">
+        {shots.map((shot, i) => (
+          <section className="panel" key={i}>
+            <div className="panel-title">
+              <span className="shot-number">
+                {String(i + 1).padStart(2, '0')}
+              </span>
+              <h3>{angles[i].split(',')[0]}</h3>
+              <button
+                className="icon-btn"
+                aria-label={`Copy shot ${i + 1}`}
+                onClick={() => copy(shot)}
+              >
+                <Copy size={15} />
+              </button>
+            </div>
+            <pre>{shot}</pre>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+function Calendar({
+  state,
+  commit,
+  notify,
+}: {
+  state: State;
+  commit: (s: State) => Promise<boolean>;
+  notify: (s: string) => void;
+}) {
+  const [title, setTitle] = useState(''),
+    [date, setDate] = useState(localDate()),
+    [platform, setPlatform] = useState('Instagram'),
+    [character, setCharacter] = useState(state.characters[0]?.name ?? '');
+  return (
+    <>
+      <form
+        className="panel calendar-form"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!title.trim()) return;
+          if (
+            await commit({
+              ...state,
+              calendar: [
+                ...state.calendar,
+                { id: uid(), date, title: title.trim(), platform, character },
+              ],
+            })
+          ) {
+            setTitle('');
+            notify('Content added to your calendar.');
+          }
+        }}
+      >
+        <label>
+          Content idea
+          <input
+            required
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Golden hour portrait series"
+          />
+        </label>
+        <label>
+          Date
+          <input
+            required
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </label>
+        <label>
+          Platform
+          <select
+            value={platform}
+            onChange={(e) => setPlatform(e.target.value)}
+          >
+            {['Instagram', 'TikTok', 'YouTube', 'Other'].map((p) => (
+              <option key={p}>{p}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Character
+          <select
+            value={character}
+            onChange={(e) => setCharacter(e.target.value)}
+          >
+            <option value="">Unassigned</option>
+            {state.characters.map((c) => (
+              <option key={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </label>
+        <button className="primary">
+          <Plus size={16} /> Add idea
+        </button>
+      </form>
+      <div className="calendar-list">
+        {state.calendar.length === 0 ? (
+          <div className="empty-state">
+            <CalendarDays size={36} />
+            <h2>A little space to plan.</h2>
+            <p>Add your first content idea above.</p>
+          </div>
+        ) : (
+          [...state.calendar]
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .map((e) => (
+              <div className="calendar-entry" key={e.id}>
+                <div className="date-block">
+                  <small>
+                    {new Date(e.date + 'T12:00:00').toLocaleDateString(
+                      undefined,
+                      { month: 'short' },
+                    )}
+                  </small>
+                  <strong>{e.date.slice(-2)}</strong>
+                </div>
+                <div>
+                  <span className="eyebrow">
+                    {e.platform} {e.character && ` / ${e.character}`}
+                  </span>
+                  <h3>{e.title}</h3>
+                </div>
+                <button
+                  className="icon-btn danger"
+                  aria-label={`Delete ${e.title}`}
+                  onClick={() =>
+                    commit({
+                      ...state,
+                      calendar: state.calendar.filter((x) => x.id !== e.id),
+                    })
+                  }
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))
+        )}
+      </div>
+    </>
+  );
+}
+function Gallery({
+  state,
+  current,
+  selected,
+  setSelected,
+  upload,
+  busy,
+  copy,
+  remove,
+}: {
+  state: State;
+  current?: Character;
+  selected: string;
+  setSelected: (s: string) => void;
+  upload: (
+    f: FileList | null,
+    k: Reference['kind'],
+    c: Character,
+    p?: string,
+  ) => void;
+  busy: boolean;
+  copy: (s: string) => void;
+  remove: (id: string, cid: string) => void;
+}) {
+  const [prompt, setPrompt] = useState(''),
+    [view, setView] = useState<Reference | null>(null);
+  if (!current) return <NeedCharacter />;
+  const images = current.references;
+  return (
+    <>
+      <section className="panel gallery-import">
+        <CharacterSelect
+          characters={state.characters}
+          selected={selected}
+          setSelected={setSelected}
+        />
+        <label>
+          Prompt used (optional)
+          <input
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Keep the creative direction with your image"
+          />
+        </label>
+        <label className="primary upload-label">
+          <Upload size={16} />
+          {busy ? 'Saving…' : 'Import images'}
+          <input
+            disabled={busy}
+            hidden
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            onChange={(e) => {
+              upload(e.target.files, 'Gallery', current, prompt);
+              e.target.value = '';
+            }}
+          />
+        </label>
+      </section>
+      <div className="gallery-grid">
+        {images.map((r) => (
+          <article className="gallery-image" key={r.id}>
+            <button onClick={() => setView(r)}>
+              <img src={r.data} alt={r.name} />
+            </button>
+            <div>
+              <span title={r.name}>{r.name}</span>
+              <button
+                className="icon-btn danger"
+                aria-label={`Delete ${r.name}`}
+                onClick={() => remove(r.id, current.id)}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+            <small>
+              {r.kind === 'Gallery'
+                ? 'IMPORTED IMAGE'
+                : r.kind.toUpperCase() + ' REFERENCE'}
+            </small>
+          </article>
+        ))}
+      </div>
+      {!images.length && (
+        <div className="empty-state">
+          <Image size={36} />
+          <h2>A gallery waiting to happen.</h2>
+          <p>Import your generated images or add character references.</p>
+        </div>
+      )}
+      {view && (
+        <div className="modal-backdrop">
+          <section className="modal image-modal">
+            <div className="modal-heading">
+              <h3>{view.name}</h3>
+              <button
+                aria-label="Close image"
+                className="icon-btn"
+                onClick={() => setView(null)}
+              >
+                <X />
+              </button>
+            </div>
+            <img src={view.data} alt={view.name} />
+            <pre>{view.prompt || 'No prompt was attached to this image.'}</pre>
+            {view.prompt && (
+              <button className="secondary" onClick={() => copy(view.prompt)}>
+                <Copy size={14} /> Copy prompt
+              </button>
+            )}
+            <a className="secondary" href={view.data} download={view.name}>
+              <Download size={14} /> Download image
+            </a>
+          </section>
+        </div>
+      )}
+    </>
+  );
+}
+function Presets({
+  state,
+  commit,
+}: {
+  state: State;
+  commit: (s: State) => Promise<boolean>;
+}) {
+  const [category, setCategory] = useState('Outfit'),
+    [value, setValue] = useState('');
+  return (
+    <>
+      <form
+        className="panel preset-form"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const v = value.trim();
+          if (
+            v &&
+            !state.presets[category].includes(v) &&
+            (await commit({
+              ...state,
+              presets: {
+                ...state.presets,
+                [category]: [...state.presets[category], v],
+              },
+            }))
+          )
+            setValue('');
+        }}
+      >
+        <label>
+          Category
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            {Object.keys(state.presets).map((k) => (
+              <option key={k}>{k}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Your preset
+          <input
+            required
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="Describe a look, place, light, or pose…"
+          />
+        </label>
+        <button className="primary">
+          <Plus size={16} /> Add preset
+        </button>
+      </form>
+      <div className="preset-grid">
+        {Object.entries(state.presets).map(([key, values]) => (
+          <section className="panel" key={key}>
+            <div className="panel-title">
+              <SlidersHorizontal size={17} />
+              <h3>{key}</h3>
+              <span className="tiny-tag">{values.length}</span>
+            </div>
+            {values.map((v) => (
+              <div className="preset-item" key={v}>
+                <span>{v}</span>
+                <button
+                  className="icon-btn"
+                  aria-label={`Delete preset ${v}`}
+                  onClick={() =>
+                    commit({
+                      ...state,
+                      presets: {
+                        ...state.presets,
+                        [key]: values.filter((x) => x !== v),
+                      },
+                    })
+                  }
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+            {!values.length && <p className="muted">Add a preset above.</p>}
+          </section>
+        ))}
+      </div>
+    </>
+  );
+}
+createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
