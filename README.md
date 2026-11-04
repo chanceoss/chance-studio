@@ -36,7 +36,7 @@ Every push to `main` runs the complete pipeline in **Actions → Validate and de
 
 ### First deployment
 
-GitHub requires one-time Pages enablement; a workflow file alone does not enable the site. The default `GITHUB_TOKEN` cannot enable Pages for the first time.
+The workflow uses the official `actions/configure-pages` action with `enablement: true`. It attempts to find or create the Pages site using `PAGES_SETUP_TOKEN` if configured, otherwise the built-in `GITHUB_TOKEN`. GitHub requires an elevated token for first-time enablement; if the built-in token is denied, enable Pages once in repository settings as described below.
 
 In the repository's **Settings → Pages → Build and deployment**, choose **GitHub Actions** as the source, then open **Actions → Validate and deploy Character Studio → Run workflow** on `main`. Subsequent pushes publish automatically. No local build or separate hosting service is needed.
 

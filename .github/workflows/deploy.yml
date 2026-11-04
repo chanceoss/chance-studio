@@ -56,39 +56,11 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Check or initialize Pages
-        uses: actions/github-script@v7
-        env:
-          HAS_SETUP_TOKEN: ${{ secrets.PAGES_SETUP_TOKEN != '' }}
+      - name: Enable and configure GitHub Pages
+        uses: actions/configure-pages@v5
         with:
-          github-token: ${{ secrets.PAGES_SETUP_TOKEN || github.token }}
-          script: |
-            const repo = context.repo;
-            const settings = `https://github.com/${repo.owner}/${repo.repo}/settings/pages`;
-            let site;
-            try {
-              site = (await github.rest.repos.getPages(repo)).data;
-            } catch (error) {
-              if (error.status === 404 && process.env.HAS_SETUP_TOKEN === 'true') {
-                try {
-                  site = (await github.rest.repos.createPagesSite({...repo, build_type: 'workflow'})).data;
-                } catch (createError) {
-                  core.setFailed(`Cannot enable GitHub Pages: ${createError.message}. GitHub Free requires a public repository. Check ${settings}.`);
-                  return;
-                }
-              } else {
-                core.setFailed(`Cannot read GitHub Pages configuration (HTTP ${error.status}). Enable Pages with source "GitHub Actions" at ${settings}, then rerun this workflow. The built-in GITHUB_TOKEN cannot enable Pages for the first time. Alternatively, configure the optional PAGES_SETUP_TOKEN repository secret documented in README.md. GitHub Free requires a public repository.`);
-                return;
-              }
-            }
-            if (site.build_type !== 'workflow') {
-              try {
-                await github.rest.repos.updateInformationAboutPagesSite({...repo, build_type: 'workflow'});
-              } catch (error) {
-                core.setFailed(`Pages must use GitHub Actions as its build source. Set it at ${settings}. GitHub returned: ${error.message}`);
-              }
-            }
-      - uses: actions/configure-pages@v5
+          enablement: true
+          token: ${{ secrets.PAGES_SETUP_TOKEN || github.token }}
       - name: Publish
         id: deployment
         uses: actions/deploy-pages@v4
